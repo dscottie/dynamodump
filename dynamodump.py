@@ -178,7 +178,7 @@ def do_get_s3_archive(profile, region, bucket, table, archive):
     # Therefore, just get item from bucket based on table name since that's what we name the files.
     filename = None
     for d in contents["Contents"]:
-        if d["Key"] == "dump/{}.{}".format(table, archive_type):
+        if d["Key"] == "dump\\{}.{}".format(table, archive_type):
             filename = d["Key"]
 
     if not filename:
@@ -186,7 +186,7 @@ def do_get_s3_archive(profile, region, bucket, table, archive):
                           "Confirm the name of the table you're restoring.")
         sys.exit(1)
 
-    output_file = "/tmp/" + os.path.basename(filename)
+    output_file = "\\tmp\\" + os.path.basename(filename)
     logging.info("Downloading file " + filename + " to " + output_file)
     s3.download_file(bucket, filename, output_file)
 
@@ -295,9 +295,9 @@ def get_restore_table_matches(table_name_wildcard, separator):
 
     matching_tables = []
     try:
-        dir_list = os.listdir("./" + args.dumpPath)
+        dir_list = os.listdir(".\\" + args.dumpPath)
     except OSError:
-        logging.info("Cannot find \"./%s\", Now trying current working directory.."
+        logging.info("Cannot find \".\%s\", Now trying current working directory.."
                      % args.dumpPath)
         dump_data_path = CURRENT_WORKING_DIR
         try:
@@ -412,7 +412,7 @@ def batch_write(conn, sleep_interval, table_name, put_requests):
             break
         if len(unprocessed_items) > 0 and i <= MAX_RETRY:
             logging.debug(str(len(unprocessed_items)) +
-                          " unprocessed items, retrying after %s seconds.. [%s/%s]"
+                          " unprocessed items, retrying after %s seconds.. [%s\%s]"
                           % (str(sleep), str(i), str(MAX_RETRY)))
             request_items = unprocessed_items
             time.sleep(sleep)
@@ -444,7 +444,12 @@ def update_provisioned_throughput(conn, table_name, read_capacity, write_capacit
     """
     Update provisioned throughput on the table to provided values
     """
-
+    
+    """
+	Skip provisioning throughput becasue role does not have permission
+	(bug in boto continues to repeat request despite exception,
+	likely this function at fault: 
+	https://github.com/boto/boto/blob/abb38474ee5124bb571da0c42be67cd27c47094f/boto/dynamodb/layer1.py#L129)
     logging.info("Updating " + table_name + " table read capacity to: " +
                  str(read_capacity) + ", write capacity to: " + str(write_capacity))
     while True:
@@ -465,7 +470,8 @@ def update_provisioned_throughput(conn, table_name, read_capacity, write_capacit
     # wait for provisioned throughput update completion
     if wait:
         wait_for_active_table(conn, table_name, "updated")
-
+    """
+	
 
 def do_empty(dynamo, table_name):
     """
@@ -611,15 +617,17 @@ def do_restore(dynamo, sleep_interval, source_table, destination_table, write_ca
 
     # create table using schema
     # restore source_table from dump directory if it exists else try current working directory
-    if os.path.exists("%s/%s" % (args.dumpPath, source_table)):
+    logging.info(args.dumpPath)
+    logging.info(source_table)
+    if os.path.exists("%s\\%s" % (args.dumpPath, source_table)):
         dump_data_path = args.dumpPath
     else:
-        logging.info("Cannot find \"./%s/%s\", Now trying current working directory.."
+        logging.info("Cannot find \".\%s\%s\", Now trying current working directory.."
                      % (args.dumpPath, source_table))
-        if os.path.exists("%s/%s" % (CURRENT_WORKING_DIR, source_table)):
+        if os.path.exists("%s\\%s" % (CURRENT_WORKING_DIR, source_table)):
             dump_data_path = CURRENT_WORKING_DIR
         else:
-            logging.info("Cannot find \"%s/%s\" directory containing dump files!"
+            logging.info("Cannot find \"%s\%s\" directory containing dump files!"
                          % (CURRENT_WORKING_DIR, source_table))
             sys.exit(1)
     table_data = json.load(open(dump_data_path + os.sep + source_table + os.sep + SCHEMA_FILE))
@@ -749,6 +757,8 @@ def do_restore(dynamo, sleep_interval, source_table, destination_table, write_ca
                             }
                         })
 
+                """
+				DS: skip this for now
                 logging.info("Updating " + destination_table +
                              " global secondary indexes write capacities as necessary..")
                 while True:
@@ -769,6 +779,7 @@ def do_restore(dynamo, sleep_interval, source_table, destination_table, write_ca
                                 "Control plane limit exceeded, retrying updating throughput of"
                                 "GlobalSecondaryIndexes in " + destination_table + "..")
                             time.sleep(sleep_interval)
+                """
 
         # wait for table to become active
         wait_for_active_table(dynamo, destination_table, "active")
